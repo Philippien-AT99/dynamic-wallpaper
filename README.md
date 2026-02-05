@@ -11,8 +11,7 @@
 ![gif](https://raw.githubusercontent.com/adi1090x/files/master/dynamic-wallpaper/main.gif) 
 
 ### Overview
-* **Hyprland Native**: Uses `swww` for smooth, high-performance transitions.
-- **No Octal Bug**: Fixed the "08/09 hour" error for seamless daily operation.
+- **Hyprland Native**: Uses `swww` for smooth, high-performance transitions.
 - **Format Support**: Automatically detects `.jpg`, `.png`, `.webp`, and `.gif`.
 - **Systemd Optimized**: Replaces old Cron jobs with modern Systemd Timers.
 
