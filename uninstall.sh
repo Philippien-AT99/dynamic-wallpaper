@@ -1,38 +1,56 @@
 #!/usr/bin/env bash
 
 ## Dynamic Wallpaper : Set wallpapers according to current time.
-## Created to work better with job schedulers (cron)
+## This script removes all files, including systemd timers and cache.
 
 ## ANSI Colors (FG & BG)
 RED="$(printf '\033[31m')"        GREEN="$(printf '\033[32m')"
 ORANGE="$(printf '\033[33m')"     BLUE="$(printf '\033[34m')"
 MAGENTA="$(printf '\033[35m')"    CYAN="$(printf '\033[36m')"
-WHITE="$(printf '\033[37m')"      BLACK="$(printf '\033[30m')"
-REDBG="$(printf '\033[41m')"      GREENBG="$(printf '\033[42m')"
-ORANGEBG="$(printf '\033[43m')"   BLUEBG="$(printf '\033[44m')"
-MAGENTABG="$(printf '\033[45m')"  CYANBG="$(printf '\033[46m')"
-WHITEBG="$(printf '\033[47m')"    BLACKBG="$(printf '\033[40m')"
+WHITE="$(printf '\033[37m')"      NC="$(printf '\033[0m')"
 
 # Path
 DES="/usr/share"
+BIN="/usr/bin/dwall"
+CACHE="$HOME/.cache/dwall_current"
+
+## Stop and disable systemd timer
+cleanup_systemd() {
+    if systemctl --user list-timers | grep -q "dwall.timer"; then
+        echo -e "${ORANGE}[*] Stopping and disabling systemd timer...${NC}"
+        systemctl --user disable --now dwall.timer 2>/dev/null
+        rm -f "$HOME/.config/systemd/user/dwall.timer"
+        rm -f "$HOME/.config/systemd/user/dwall.service"
+        systemctl --user daemon-reload
+    fi
+}
 
 ## Delete files
 rmdir_dw() {
-	echo -e ${ORANGE}"[*] Uninstalling Dynamic Wallpaper..."${WHITE}
-	if [[ -d "$DES"/dynamic-wallpaper ]]; then
-		# delete dwall directory
-		sudo rm -rf "$DES"/dynamic-wallpaper
-	fi
+    echo -e "${ORANGE}[*] Uninstalling Dynamic Wallpaper files...${NC}"
+    
+    # Remove binary link
+    if [[ -L "$BIN" ]]; then
+        sudo rm "$BIN"
+    fi
+
+    # Remove share directory
+    if [[ -d "$DES/dynamic-wallpaper" ]]; then
+        sudo rm -rf "$DES/dynamic-wallpaper"
+    fi
+    
+    # Remove cache file
+    if [[ -f "$CACHE" ]]; then
+        rm "$CACHE"
+    fi
 }
 
-del_files() {
-	# remove link in bin directory
-	if [[ -L /usr/bin/dwall ]]; then
-		sudo rm /usr/bin/dwall
-	fi
-	echo -e ${GREEN}"[*] Uninstalled Successfully."${WHITE}
+## Final message
+finish() {
+    echo -e "${GREEN}[*] Uninstalled Successfully.${NC}"
 }
 
-## Uninstall
+## Uninstall execution
+cleanup_systemd
 rmdir_dw
-del_files
+finish

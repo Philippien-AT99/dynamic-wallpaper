@@ -20,7 +20,7 @@ WHITEBG="$(printf '\033[47m')"    BLACKBG="$(printf '\033[40m')"
 
 ## Wallpaper directory
 DIR="/usr/share/dynamic-wallpaper/images"
-HOUR=`date +%k`
+# HOUR=`date +%k`
 
 ## Wordsplit in ZSH
 set -o shwordsplit 2>/dev/null
@@ -48,7 +48,7 @@ trap exit_on_signal_SIGTERM SIGTERM
 
 ## Prerequisite
 Prerequisite() { 
-    dependencies=(feh xrandr crontab)
+    dependencies=(swww systemd)
     for dependency in "${dependencies[@]}"; do
         type -p "$dependency" &>/dev/null || {
             echo -e ${RED}"[!] ERROR: Could not find ${GREEN}'${dependency}'${RED}, is it installed?" >&2
@@ -90,178 +90,129 @@ usage() {
 	EOF
 }
 
-## Set wallpaper in kde
-set_kde() {
-	qdbus org.kde.plasmashell /PlasmaShell org.kde.PlasmaShell.evaluateScript "
-		var allDesktops = desktops();
-		print (allDesktops);
-		for (i=0;i<allDesktops.length;i++) {
-			d = allDesktops[i];
-			d.wallpaperPlugin = 'org.kde.image';
-			d.currentConfigGroup = Array('Wallpaper',
-										'org.kde.image',
-										'General');
-			d.writeConfig('Image', 'file://"$1"')
-		}"
-}
+## Set wallpaper in hyprland
+set_hyprland() {
+    if [[ ! -f "$1" ]]; then
+        echo "Error: Image not found at $1"
+        return 1
+    fi
 
-## Set wallpaper in cinnamon
-set_cinnamon() {
-	 gsettings set org.cinnamon.desktop.background picture-uri "file:///$1"
-}
+    if ! swww query >/dev/null 2>&1; then
+        swww init
+        sleep 0.5 # Petit délai pour laisser le temps au démon de s'initialiser
+    fi
 
-## Set wallpaper in GNOME
-set_gnome() {
-	gsettings set org.gnome.desktop.background picture-uri "file:///$1"
-	gsettings set org.gnome.desktop.screensaver picture-uri "file:///$1"
+    # 3. Apply the wallpaper
+    swww img "$1" \
+        --transition-type outer \
+        --transition-step 20 \
+        --transition-fps 60
 }
 
 ## Choose wallpaper setter
-case "$OSTYPE" in
-	linux*)
-			if [[ "$XDG_SESSION_TYPE" == 'x11' ]]; then
-				if [[ "$DESKTOP_SESSION" =~ ^(MATE|Mate|mate)$ ]]; then
-					SETTER="gsettings set org.mate.background picture-filename"
-				elif [[ "$DESKTOP_SESSION" =~ ^(Xfce Session|xfce session|XFCE|xfce|Xubuntu|xubuntu)$ ]]; then
-					SCREEN="$(xrandr --listactivemonitors | awk -F ' ' 'END {print $1}' | tr -d \:)"
-					MONITOR="$(xrandr --listactivemonitors | awk -F ' ' 'END {print $2}' | tr -d \*+)"
-					SETTER="xfconf-query --channel xfce4-desktop --property /backdrop/screen$SCREEN/monitor$MONITOR/workspace0/last-image --set"
-				elif [[ "$DESKTOP_SESSION" =~ ^(LXDE|Lxde|lxde)$ ]]; then
-					SETTER="pcmanfm --set-wallpaper"
-				elif [[ "$DESKTOP_SESSION" =~ ^(cinnamon|Cinnamon)$ ]]; then
-					SETTER=set_cinnamon
-				elif [[ "$DESKTOP_SESSION" =~ ^(/usr/share/xsessions/plasma|NEON|Neon|neon|PLASMA|Plasma|plasma|KDE|Kde|kde)$ ]]; then
-					SETTER=set_kde
-				elif [[ "$DESKTOP_SESSION" =~ ^(PANTHEON|Pantheon|pantheon|GNOME|Gnome|gnome|Gnome-xorg|gnome-xorg|UBUNTU|Ubuntu|ubuntu|DEEPIN|Deepin|deepin|POP|Pop|pop|ZORIN|Zorin|zorin|budgie-desktop)$ ]]; then
-					SETTER=set_gnome
-				else 
-					SETTER="feh --bg-fill"
-				fi
-			elif [[ "$XDG_SESSION_TYPE" == 'wayland' ]]; then
-				SETTER="eval ogurictl output '*' --image"
-			fi
-			;;
-esac
+## Choose wallpaper setter
+if [[ -n "$HYPRLAND_INSTANCE_SIGNATURE" || "$XDG_CURRENT_DESKTOP" == "Hyprland" ]]; then
+    SETTER=set_hyprland
+elif [[ "$XDG_SESSION_TYPE" == "wayland" ]]; then
+    if command -v swww >/dev/null 2>&1; then
+        SETTER=set_hyprland
+    else
+        echo -e "${RED}[!] Error: 'swww' is required for Wayland.${NC}"
+        exit 1
+    fi
+else
+    echo -e "${RED}[!] Error: This fork is optimized for Wayland/Hyprland only.${NC}"
+    exit 1
+fi
 
 ## Display Info
 display_info() {
-	if [[ "$XDG_SESSION_TYPE" == 'x11' ]]; then
-		echo -e ${ORANGE}"[*] Setting wallpaper in ${GREEN}$XDG_SESSION_TYPE ($DESKTOP_SESSION)${ORANGE} session, using : ${MAGENTA}$SETTER"
-	elif [[ "$XDG_SESSION_TYPE" == 'wayland' ]]; then
-		if [[ ! `pidof oguri` ]]; then
-			echo -e ${RED}"[*] 'oguri' daemon is not running. You must start the daemon first.\n[!] Kill 'swaybg' in sway session if the wallpaper is not getting applied."
-			exit 1
-		else
-			echo -e ${ORANGE}"[*] Setting wallpaper in ${GREEN}$XDG_SESSION_TYPE ($XDG_SESSION_DESKTOP)${ORANGE} session, using : ${MAGENTA}$SETTER"
-		fi
-	fi
+    local session_name="${XDG_CURRENT_DESKTOP:-Wayland}"
+    [[ -n "$HYPRLAND_INSTANCE_SIGNATURE" ]] && session_name="Hyprland"
+
+    echo -e "${ORANGE}[*] Setting wallpaper in ${GREEN}${session_name}${ORANGE} session"
+    echo -e "${ORANGE}[*] Using setter : ${MAGENTA}${SETTER}${NC}"
 }
 
 ## Get Image
 get_img() {
-	image="$DIR/$STYLE/$1"
+    local search_path="$DIR/$STYLE/$1"
+    local found_file=$(ls ${search_path}.* 2>/dev/null | head -n 1)
 
-	# get image format
-	if [[ -f "${image}.png" ]]; then
-		FORMAT="png"
-	elif [[ -f "${image}.jpg" ]]; then
-		FORMAT="jpg"
-	else
-		echo -e ${RED}"[!] Invalid image file, Exiting..."
-		{ reset_color; exit 1; }
-	fi
+    if [[ -f "$found_file" ]]; then
+        image="$found_file"
+    else
+        echo -e "${RED}[!] Error: No image found for '$1' in $DIR/$STYLE/ (checked .png, .jpg, .webp, .gif)${NC}"
+        exit 1
+    fi
 }
 
 ## Set wallpaper with pywal
 pywal_set() {
-	get_img "$1"
-	if [[ -x `command -v wal` ]]; then
-		wal -i "$image.$FORMAT"
-	else
-		echo -e ${RED}"[!] pywal is not installed on your system, exiting..."
-		{ reset_color; exit 1; }
-	fi
+    get_img "$1"
+    if command -v wal >/dev/null 2>&1; then
+        wal -i "$image" -n
+        $SETTER "$image"
+    else
+        echo -e "${RED}[!] Error: 'pywal' is not installed. Please install it.${NC}"
+        exit 1
+    fi
 }
 
 ## Wallpaper Setter
 set_wallpaper() {
-	cfile="$HOME/.cache/dwall_current"
-	get_img "$1"
+    local cfile="$HOME/.cache/dwall_current"
+    get_img "$1"
+    if [[ -n "$image" ]]; then
+        $SETTER "$image"
+    else
+        echo -e "${RED}[!] Error: Could not resolve image path for '$1'${NC}"
+        exit 1
+    fi
 
-	# set wallpaper with setter
-	if [[ -n "$FORMAT" ]]; then
-		$SETTER "$image.$FORMAT"
-	fi
-
-	# make/update dwall cache file
-	if [[ ! -f "$cfile" ]]; then
-		touch "$cfile"
-		echo "$image.$FORMAT" > "$cfile"
-	else
-		echo "$image.$FORMAT" > "$cfile"	
-	fi
+    echo "$image" > "$cfile"
 }
 
 ## Check valid style
 check_style() {
-	styles=(`ls "$DIR"`)
-	display_info
-	for i in "${styles[@]}"; do
-		if [[ "$i" == "$1" ]]; then
-			echo -e ${BLUE}"[*] Using style : ${MAGENTA}$1"
-			VALID='YES'
-			{ reset_color; break; }
-		else
-			continue
-		fi
-	done
-
-	if [[ -z "$VALID" ]]; then
-		echo -e ${RED}"[!] Invalid style name : ${GREEN}$1${RED}, exiting..."
-		{ reset_color; exit 1; }
-	fi
+    display_info
+    if [[ -d "$DIR/$1" ]]; then
+        echo -e "${BLUE}[*] Using style : ${MAGENTA}$1${NC}"
+        STYLE="$1"
+    else
+        echo -e "${RED}[!] Invalid style name : ${GREEN}$1${NC}"
+        echo -e "${RED}[!] Available styles are : ${YELLOW}$(ls -m "$DIR")${NC}"
+        exit 1
+    fi
 }
 
 ## Main
 main() {
-	# get current hour
-	num=$(($HOUR/1))
-	# set wallpaper accordingly
-	if [[ -n "$PYWAL" ]]; then
-		{ pywal_set "$num"; reset_color; exit 0; }
-	else
-		{ set_wallpaper "$num"; reset_color; exit 0; }
-	fi
+    local h=$((10#$(date +%H)))
+    if [[ -n "$PYWAL" ]]; then
+        pywal_set "$h"
+    else
+        set_wallpaper "$h"
+    fi
+    reset_color
+    exit 0
 }
 
 ## Get Options
 while getopts ":s:hp" opt; do
-	case ${opt} in
-		p)
-			PYWAL=true
-			;;
-		s)
-			STYLE=$OPTARG
-			;;
-		h)
-			{ usage; reset_color; exit 0; }
-			;;
-		\?)
-			echo -e ${RED}"[!] Unknown option, run ${GREEN}`basename $0` -h"
-			{ reset_color; exit 1; }
-			;;
-		:)
-			echo -e ${RED}"[!] Invalid:$GREEN -${OPTARG}$RED requires an argument."
-			{ reset_color; exit 1; }
-			;;
-	esac
+    case ${opt} in
+        p) PYWAL=true ;;
+        s) STYLE=$OPTARG ;;
+        h) usage; exit 0 ;;
+        *) usage; exit 1 ;;
+    esac
 done
 
 ## Run
-Prerequisite
 if [[ "$STYLE" ]]; then
-	check_style "$STYLE"
+    check_style "$STYLE"
     main
 else
-	{ usage; reset_color; exit 1; }
+    usage
+    exit 1
 fi
