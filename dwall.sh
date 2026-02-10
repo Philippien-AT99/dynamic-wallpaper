@@ -147,15 +147,24 @@ get_img() {
     fi
 }
 
-## Set wallpaper with pywal
-pywal_set() {
+## Set wallpaper with matugen or pywal
+setter() {
     get_img "$1"
-    if command -v wal >/dev/null 2>&1; then
-        wal -i "$image" -n
-        $SETTER "$image"
+    if command -v matugen >/dev/null 2>&1; then
+            echo -e "${GREEN}[+] Generating colors with Matugen...${NC}"
+            matugen image "$image" >/dev/null 2>&1
+    elif command -v wal >/dev/null 2>&1; then
+        wal -i "$image" -n >/dev/null 2>&1
     else
-        echo -e "${RED}[!] Error: 'pywal' is not installed. Please install it.${NC}"
-        exit 1
+        echo -e "${YELLOW}[!] Warning: Neither 'matugen' nor 'pywal' is installed.${NC}"
+        echo -e "${YELLOW}[!] Colors will not be updated.${NC}"
+    fi
+                
+    if command -v "$SETTER" >/dev/null 2>&1; then
+           $SETTER "$image"
+    else
+           echo -e "${RED}[!] Error: Wallpaper setter '$SETTER' not found.${NC}"
+           exit 1
     fi
 }
 
