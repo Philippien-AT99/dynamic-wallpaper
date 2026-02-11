@@ -9,7 +9,7 @@
 <p align="center">A simple <code>bash</code> script to set wallpapers according to current time, optimized for <b>Hyprland & Wayland</b>.</p>
 
 > [!NOTE]
-> Note: Matugen support is experimental as I don't use it personally. Feel free to open an issue if it behaves unexpectedly!
+> Matugen support is experimental as I don't use it personally. Feel free to open an issue if it behaves unexpectedly!
 
 ![gif](https://raw.githubusercontent.com/adi1090x/files/master/dynamic-wallpaper/main.gif) 
 
